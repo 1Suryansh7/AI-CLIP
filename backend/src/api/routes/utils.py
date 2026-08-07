@@ -119,13 +119,20 @@ def _coerce_int(raw: object, field_name: str) -> int:
         raise HTTPException(status_code=400, detail=f"{field_name} must be an integer") from exc
 
 
+def _default_transcription_provider() -> str:
+    configured = (config.transcription_provider or "").strip().lower()
+    if configured in SUPPORTED_TRANSCRIPTION_PROVIDERS:
+        return configured
+    return "local"
+
+
 def _resolve_transcription_provider(raw: object) -> str:
     """Resolve transcription provider from raw value."""
     if not isinstance(raw, str):
-        return "assemblyai"
+        return _default_transcription_provider()
     provider = raw.strip().lower()
     if provider not in SUPPORTED_TRANSCRIPTION_PROVIDERS:
-        return "assemblyai"
+        return _default_transcription_provider()
     return provider
 
 

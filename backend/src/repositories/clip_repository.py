@@ -41,6 +41,8 @@ class ClipRepository:
         words_json: str | None = None,
         pycaps_template: str | None = None,
         thumbnail_filename: str | None = None,
+        title: str | None = None,
+        hook_text: str | None = None,
     ) -> str:
         """Create a new clip record and return its ID."""
         result = await db.execute(
@@ -48,11 +50,11 @@ class ClipRepository:
                 INSERT INTO generated_clips
                 (task_id, filename, file_path, start_time, end_time, duration,
                  text, relevance_score, reasoning, clip_order,
-                 words_json, pycaps_template, thumbnail_filename, created_at)
+                 words_json, pycaps_template, thumbnail_filename, title, hook_text, created_at)
                 VALUES
                 (:task_id, :filename, :file_path, :start_time, :end_time, :duration,
                  :text, :relevance_score, :reasoning, :clip_order,
-                 :words_json, :pycaps_template, :thumbnail_filename, NOW())
+                 :words_json, :pycaps_template, :thumbnail_filename, :title, :hook_text, NOW())
                 RETURNING id
             """),
             {
@@ -69,6 +71,8 @@ class ClipRepository:
                 "words_json": words_json,
                 "pycaps_template": pycaps_template or "word-focus",
                 "thumbnail_filename": thumbnail_filename,
+                "title": title,
+                "hook_text": hook_text,
             }
         )
         clip_id = result.scalar()
@@ -82,7 +86,8 @@ class ClipRepository:
             sql_text("""
                 SELECT id, filename, file_path, start_time, end_time, duration,
                        text, relevance_score, reasoning, clip_order, created_at,
-                       words_json, pycaps_template, rendered_file_path, thumbnail_filename
+                       words_json, pycaps_template, rendered_file_path, thumbnail_filename,
+                       title, hook_text
                 FROM generated_clips
                 WHERE task_id = :task_id
                 ORDER BY clip_order ASC
@@ -117,6 +122,8 @@ class ClipRepository:
                 "thumbnail_filename": row.thumbnail_filename,
                 "words": words,
                 "pycaps_template": row.pycaps_template or "word-focus",
+                "title": row.title or (row.text[:35] + "…" if row.text and len(row.text) > 35 else f"Clip #{row.clip_order}"),
+                "hook_text": row.hook_text or "",
                 "rendered_url": f"/clips/{Path(row.rendered_file_path).name}" if row.rendered_file_path else None,
             })
 
@@ -151,7 +158,7 @@ class ClipRepository:
         params = {"clip_id": clip_id}
 
         for key, value in updates.items():
-            if key in ["filename", "file_path", "start_time", "end_time", "duration", "text", "relevance_score", "reasoning", "clip_order", "words_json", "pycaps_template", "rendered_file_path", "thumbnail_filename"]:
+            if key in ["filename", "file_path", "start_time", "end_time", "duration", "text", "relevance_score", "reasoning", "clip_order", "words_json", "pycaps_template", "rendered_file_path", "thumbnail_filename", "title", "hook_text"]:
                 set_parts.append(f"{key} = :{key}")
                 params[key] = value
 

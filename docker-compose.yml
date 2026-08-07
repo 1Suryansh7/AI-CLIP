@@ -1,23 +1,4 @@
-# =============================================================================
-# Teek (teek) — Docker Compose
-#
-# REQUIRED: A `.env` file must exist in this directory before running
-# `docker compose up`. Copy `.env.sample` to `.env` and fill in your values.
-#
-# Docker Compose reads `.env` automatically for ${VAR} interpolation used in
-# this file (ports, volume paths, DB credentials). Every service also declares
-# `env_file: .env` so those same variables are injected into the containers at
-# runtime. Without a valid `.env`, required variables (database credentials,
-# API keys, auth secrets) will be missing and services will fail to start.
-#
-# Reference: docs/config.md | docs/local-host-mappings.md | .env.sample
-# =============================================================================
-
-# ---------------------------------------------------------------------------
-# Reusable YAML anchors (x- extension fields are ignored by Docker Compose)
-# ---------------------------------------------------------------------------
-
-# Shared volumes mounted by backend, worker, worker2, and worker-assembly.
+# Shared volumes mounted by backend, worker, and worker2.
 x-worker-volumes: &worker-volumes
   - ./backend/src:/app/src
   - ./backend/uploads:/app/uploads
@@ -26,6 +7,7 @@ x-worker-volumes: &worker-volumes
   - ./backend/transitions:/app/transitions
   - ./backend/downloads:/app/downloads
   - ./cookies.txt:/app/cookies.txt
+  - ./video1:/app/video1
   - ${WHISPER_CACHE_HOST_DIR:-./backend/.cache/whisper}:/root/.cache/whisper
 
 # Shared depends_on block for all worker containers.
@@ -39,37 +21,25 @@ x-worker-depends: &worker-depends
   backend:
     condition: service_healthy
 
-# ---------------------------------------------------------------------------
-# Services
-# ---------------------------------------------------------------------------
-
 services:
-  # --------------------------------------------------------------------------
-  # Migrations — runs once on startup; all other services wait for completion.
-  # --------------------------------------------------------------------------
   migrations:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: teek-migrations
     command: [".venv/bin/python", "-m", "src.migrations_cli"]
-    env_file: .env  # Required — provides POSTGRES_* credentials
+    env_file: .env
     volumes:
       - ./backend/src:/app/src
       - ./backend/migrations:/app/migrations
     environment:
       - PYTHONPATH=/app
-      # DATABASE_URL is assembled here from individual .env credentials.
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     depends_on:
       postgres:
         condition: service_healthy
     restart: "no"
 
-  # --------------------------------------------------------------------------
-  # Frontend — Next.js 15 App Router.
-  # FRONTEND_HOST_PORT, NEXT_PUBLIC_API_URL, BETTER_AUTH_* etc. come from .env.
-  # --------------------------------------------------------------------------
   frontend:
     build:
       context: ./frontend
@@ -79,19 +49,16 @@ services:
     command: ["sh", "-lc", "bunx prisma generate && bun run dev"]
     ports:
       - "${FRONTEND_HOST_PORT:-3000}:3000"
-    env_file: .env  # Required — provides BETTER_AUTH_*, NEXT_PUBLIC_API_URL, etc.
+    env_file: .env
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
       - ./frontend/prisma:/app/prisma
       - ./frontend/next.config.ts:/app/next.config.ts
     environment:
-      # Static values that must not come from .env.
       - NODE_ENV=development
       - NEXT_TELEMETRY_DISABLED=1
-      # Internal Docker network URL — always points to the backend service name.
       - BACKEND_INTERNAL_URL=http://backend:8000
-      # DATABASE_URL is assembled here; frontend uses the plain postgres:// driver.
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     depends_on:
       postgres:
@@ -106,33 +73,25 @@ services:
       retries: 5
       start_period: 60s
 
-  # --------------------------------------------------------------------------
-  # Backend — FastAPI application server.
-  # API keys, Whisper config, auth secrets, etc. all come from .env.
-  # BACKEND_HOST_PORT comes from .env (see docs/local-host-mappings.md).
-  # --------------------------------------------------------------------------
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
       platforms:
-        - linux/amd64  # Force x86_64 for MediaPipe compatibility
+        - linux/amd64
     container_name: teek-backend
     command: [".venv/bin/uvicorn", "src.main_refactored:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "${BACKEND_HOST_PORT:-8000}:8000"
-    env_file: .env  # Required — provides all API keys, secrets, and feature flags
+    env_file: .env
     volumes: *worker-volumes
     environment:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
-      # DATABASE_URL is assembled here from individual .env credentials.
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - TEMP_DIR=/app
-      # Internal Docker network hostnames — not user-configurable via .env.
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      # Container-internal model path; overrides the host path stored in .env.
       - MEDIAPIPE_FACE_MODEL_PATH=/app/models/blaze_face_short_range.tflite
     restart: unless-stopped
     depends_on:
@@ -149,9 +108,6 @@ services:
       retries: 5
       start_period: 60s
 
-  # --------------------------------------------------------------------------
-  # Worker — primary background video processing worker (local Whisper queue).
-  # --------------------------------------------------------------------------
   worker:
     build:
       context: ./backend
@@ -160,7 +116,7 @@ services:
         - linux/amd64
     container_name: teek-worker
     command: [".venv/bin/arq", "src.workers.tasks.WorkerSettings"]
-    env_file: .env  # Required — provides API keys, Whisper config, queue names, etc.
+    env_file: .env
     volumes: *worker-volumes
     environment:
       - PYTHONPATH=/app
@@ -170,18 +126,19 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - MEDIAPIPE_FACE_MODEL_PATH=/app/models/blaze_face_short_range.tflite
-      # ARQ_QUEUE_NAME is the queue this worker listens on (alias of ARQ_QUEUE_NAME_LOCAL).
       - ARQ_QUEUE_NAME=${ARQ_QUEUE_NAME_LOCAL:-arq:queue:local}
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     restart: unless-stopped
     depends_on: *worker-depends
 
-  # --------------------------------------------------------------------------
-  # Worker 2 — optional second worker for parallel processing.
-  # Enable with: docker compose --profile multi-worker up
-  # Or set ENABLE_MULTI_WORKER=true in .env and use ./start.sh
-  # --------------------------------------------------------------------------
   worker2:
     profiles: ["multi-worker"]
     build:
@@ -191,7 +148,7 @@ services:
         - linux/amd64
     container_name: teek-worker-2
     command: [".venv/bin/arq", "src.workers.tasks.WorkerSettings"]
-    env_file: .env  # Required — provides API keys, Whisper config, queue names, etc.
+    env_file: .env
     volumes: *worker-volumes
     environment:
       - PYTHONPATH=/app
@@ -204,48 +161,11 @@ services:
       - ARQ_QUEUE_NAME=${ARQ_QUEUE_NAME_LOCAL:-arq:queue:local}
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
-      # worker2 uses its own device and concurrency settings to avoid contention.
       - WHISPER_DEVICE=${WORKER2_WHISPER_DEVICE:-auto}
       - WORKER_MAX_JOBS=${WORKER2_MAX_JOBS:-1}
     restart: unless-stopped
     depends_on: *worker-depends
 
-  # --------------------------------------------------------------------------
-  # Worker Assembly — dedicated single-job worker for AssemblyAI tasks.
-  # Hardcoded to assemblyai provider and cpu Whisper (no local GPU needed).
-  # --------------------------------------------------------------------------
-  worker-assembly:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      platforms:
-        - linux/amd64
-    container_name: teek-worker-assembly
-    command: [".venv/bin/arq", "src.workers.tasks.WorkerSettings"]
-    env_file: .env  # Required — provides ASSEMBLY_AI_API_KEY and other secrets
-    volumes: *worker-volumes
-    environment:
-      - PYTHONPATH=/app
-      - PYTHONUNBUFFERED=1
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      - TEMP_DIR=/app
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - MEDIAPIPE_FACE_MODEL_PATH=/app/models/blaze_face_short_range.tflite
-      # Hardcoded overrides — this worker always uses AssemblyAI regardless of .env.
-      - TRANSCRIPTION_PROVIDER=assemblyai
-      - WHISPER_DEVICE=cpu
-      - WORKER_MAX_JOBS=1
-      - ARQ_QUEUE_NAME=${ARQ_QUEUE_NAME_ASSEMBLY:-arq:queue:assembly}
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
-    restart: unless-stopped
-    depends_on: *worker-depends
-
-  # --------------------------------------------------------------------------
-  # Redis — job queue and caching layer.
-  # REDIS_HOST_PORT comes from .env (see docs/local-host-mappings.md).
-  # --------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
     container_name: teek-redis
@@ -260,14 +180,10 @@ services:
       timeout: 10s
       retries: 3
 
-  # --------------------------------------------------------------------------
-  # PostgreSQL — primary database for tasks, users, clips, and sessions.
-  # POSTGRES_DB/USER/PASSWORD and POSTGRES_HOST_PORT must be set in .env.
-  # --------------------------------------------------------------------------
   postgres:
     image: postgres:15-alpine
     container_name: teek-postgres
-    env_file: .env  # Required — provides POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
+    env_file: .env
     ports:
       - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:

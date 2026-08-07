@@ -11,10 +11,14 @@ interface VideoPlayerWithSubtitlesProps {
   showSubtitles?: boolean;
   className?: string;
   poster?: string;
+  words?: any[];
+  template?: string;
+  clipStartSeconds?: number;
 }
 
 export interface VideoPlayerWithSubtitlesRef extends VideoPlayerRef {
   setShowSubtitles: (show: boolean) => void;
+  setTemplate?: (template: string) => void;
 }
 
 /**

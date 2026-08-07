@@ -497,11 +497,11 @@ export default function LibraryPage() {
                 )}
 
                 {/* No Clips Message */}
-                {expandedProjects.has(project.id) && project.status !== "awaiting_review" && project.clips.length === 0 && (
+                {expandedProjects.has(project.id) && (project.status as string) !== "awaiting_review" && project.clips.length === 0 && (
                   <div className="p-6 pt-0 text-center text-muted-foreground border-t border-border">
                     {project.status === "processing"
                       ? "Clips are being generated..."
-                      : project.status === "awaiting_review"
+                      : (project.status as string) === "awaiting_review"
                       ? "Review is pending — open the task to edit and generate clips."
                       : "No clips available for this project"}
                   </div>

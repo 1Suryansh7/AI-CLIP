@@ -9,7 +9,8 @@ export interface PendingUploadConfig {
 }
 
 export interface PendingUpload {
-  file: File;
+  file?: File;
+  files?: File[];
   config: PendingUploadConfig;
 }
 

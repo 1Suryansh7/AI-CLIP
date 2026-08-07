@@ -42,46 +42,49 @@ TEMPLATES: Dict[str, Dict[str, Any]] = {
         "highlight_color": "#FFFF00",
         "bold_active": True,
         "words_per_group": 3,
+        "margin_v_ratio": 0.42,
         "description": "Word-by-word focus highlighting (TikTok style)",
     },
     "default": {
         "highlight_color": "#FFFF00",
         "bold_active": True,
         "words_per_group": 3,
+        "margin_v_ratio": 0.42,
         "description": "Standard style with word highlighting",
     },
     # ---- Calm / readable ----------------------------------------------------
     "classic": {
         "highlight_color": "#FFFFFF",
         "words_per_group": 6,
-        "margin_v_ratio": 0.10,
+        "margin_v_ratio": 0.42,
         "description": "Full lines at the bottom, no highlight colour pop",
     },
     "minimalist": {
         "highlight_color": "#FFFFFF",
         "dim_inactive": True,
         "words_per_group": 4,
-        "margin_v_ratio": 0.12,
+        "margin_v_ratio": 0.42,
         "description": "Inactive words dimmed; active word glows white",
     },
     "neo-minimal": {
         "highlight_color": "#AADDFF",
         "dim_inactive": True,
         "words_per_group": 3,
-        "margin_v_ratio": 0.38,
-        "description": "Light-blue highlight, inactive words dimmed, higher position",
+        "margin_v_ratio": 0.42,
+        "description": "Light-blue highlight, inactive words dimmed, dead center position",
     },
     # ---- Elegant ------------------------------------------------------------
     "model": {
         "highlight_color": "#FFD700",
         "italic_active": True,
         "words_per_group": 3,
+        "margin_v_ratio": 0.42,
         "description": "Gold italic highlight, sophisticated look",
     },
     "line-focus": {
         "highlight_color": "#AADDFF",
         "words_per_group": 5,
-        "margin_v_ratio": 0.18,
+        "margin_v_ratio": 0.42,
         "description": "Wide lines, light-blue current word",
     },
     # ---- High-energy --------------------------------------------------------
@@ -90,6 +93,7 @@ TEMPLATES: Dict[str, Dict[str, Any]] = {
         "bold_active": True,
         "size_scale": 1.35,
         "words_per_group": 2,
+        "margin_v_ratio": 0.42,
         "force_transform": "uppercase",
         "description": "Orange-red pop, UPPERCASE, 2 words at a time",
     },
@@ -98,6 +102,7 @@ TEMPLATES: Dict[str, Dict[str, Any]] = {
         "bold_active": True,
         "size_scale": 1.5,
         "words_per_group": 1,
+        "margin_v_ratio": 0.42,
         "force_transform": "uppercase",
         "description": "One WORD at a time, magenta, massive size pop",
     },
@@ -106,12 +111,14 @@ TEMPLATES: Dict[str, Dict[str, Any]] = {
         "bold_active": True,
         "size_scale": 1.2,
         "words_per_group": 3,
+        "margin_v_ratio": 0.42,
         "description": "Cyan highlight with size pop on active word",
     },
     "fast": {
         "highlight_color": "#00FF88",
         "bold_active": True,
         "words_per_group": 2,
+        "margin_v_ratio": 0.42,
         "description": "Green highlight, 2 words — snappy rhythm",
     },
     "retro-gaming": {
@@ -119,6 +126,7 @@ TEMPLATES: Dict[str, Dict[str, Any]] = {
         "bold_active": True,
         "size_scale": 1.15,
         "words_per_group": 2,
+        "margin_v_ratio": 0.42,
         "force_transform": "uppercase",
         "description": "Green-on-black, UPPERCASE, pixel-game vibe",
     },
@@ -139,9 +147,14 @@ _FONT_FAMILY_MAP: Dict[str, str] = {
     "ArchivoBlack-Regular": "Archivo Black",
     "BarlowCondensed-SemiBold": "Barlow Condensed",
     "BebasNeue-Regular": "Bebas Neue",
+    "BurbankBigCondensed-Black": "Burbank Big Condensed",
     "IndieFlower-Regular": "Indie Flower",
     "Inter-Variable": "Inter",
     "Lato-Bold": "Lato",
+    "Montserrat-Bold": "Montserrat",
+    "Montserrat-ExtraBold": "Montserrat ExtraBold",
+    "Montserrat-Regular": "Montserrat",
+    "Montserrat-SemiBold": "Montserrat",
     "NotoSans-Regular": "Noto Sans",
     "NotoSansArabic-Regular": "Noto Sans Arabic",
     "OpenSans-Variable": "Open Sans",
@@ -252,13 +265,14 @@ def generate_ass_content(
     font_family_name = resolve_font_family(font_family_key)
     font_size = max(8, int(style.get("font_size", 24)))
     font_color = style.get("font_color", "#FFFFFF")
+    highlight_color_hex = style.get("highlight_color") or tmpl.get("highlight_color", "#FFFF00")
     font_weight = int(style.get("font_weight", 600))
     letter_spacing = int(style.get("letter_spacing", 0))
     stroke_color = style.get("stroke_color", "#000000")
-    stroke_width = int(style.get("stroke_width", 2))
+    stroke_width = int(style.get("stroke_width", 4))
     shadow_color = style.get("shadow_color", "#000000")
-    shadow_opacity = float(style.get("shadow_opacity", 0.5))
-    shadow_offset_y = int(style.get("shadow_offset_y", 2))
+    shadow_opacity = float(style.get("shadow_opacity", 0.0))
+    shadow_offset_y = int(style.get("shadow_offset_y", 0))
 
     # Template can force text_transform (e.g. "explosive" = uppercase)
     text_transform = tmpl.get("force_transform") or style.get("text_transform", "none")
@@ -269,7 +283,7 @@ def generate_ass_content(
     bold_active: bool = bool(tmpl.get("bold_active", False))
     italic_active: bool = bool(tmpl.get("italic_active", False))
     dim_inactive: bool = bool(tmpl.get("dim_inactive", False))
-    margin_v_ratio: float = float(tmpl.get("margin_v_ratio", 0.28))
+    margin_v_ratio: float = float(style.get("margin_v_ratio", tmpl.get("margin_v_ratio", 0.42)))
 
     # --- ASS colour conversions ---
     primary_color = _hex_to_ass_color(font_color)
@@ -278,7 +292,7 @@ def generate_ass_content(
     outline_color = _hex_to_ass_color(stroke_color)
     shadow_alpha = int((1.0 - max(0.0, min(1.0, shadow_opacity))) * 255)
     back_color = _hex_to_ass_color(shadow_color, alpha=shadow_alpha)
-    highlight_color = _hex_to_ass_color(tmpl["highlight_color"])
+    highlight_color = _hex_to_ass_color(highlight_color_hex)
 
     bold_flag = -1 if font_weight >= 600 else 0
     margin_v = int(PLAY_RES_Y * margin_v_ratio)
@@ -304,6 +318,8 @@ def generate_ass_content(
         "ScaledBorderAndShadow: yes\n"
     )
 
+    hook_text_clean = (style.get("hook_text") or style.get("on_screen_text") or "").strip()
+
     # --- V4+ Styles ---
     # Format: Name Fontname Fontsize PrimaryColour SecondaryColour OutlineColour BackColour
     #         Bold Italic Underline StrikeOut ScaleX ScaleY Spacing Angle
@@ -319,6 +335,54 @@ def generate_ass_content(
         f"{bold_flag},0,0,0,100,100,{letter_spacing},0,1,"
         f"{stroke_width},{shadow},2,10,10,{margin_v},1\n"
     )
+
+    if hook_text_clean:
+        # Header hype text: customizable font, color, position, and background
+        h_font_key = style.get("hook_font_family") or style.get("hook_font") or font_family_key
+        h_font_name = resolve_font_family(h_font_key)
+
+        # Detect light/white canvas background card
+        pad_col = str(style.get("pad_color") or style.get("canvas_color") or "").lower()
+        is_light_canvas = pad_col in ("white", "#ffffff", "#fff", "0xffffff") or style.get("canvas_style") == "white_card"
+
+        default_h_color = "#000000" if is_light_canvas else "#FFFFFF"
+        h_color_hex = style.get("hook_font_color") or style.get("hook_color") or default_h_color
+        header_primary = _hex_to_ass_color(h_color_hex)
+        header_secondary = header_primary
+
+        h_outline_hex = style.get("hook_stroke_color") or ("#FFFFFF" if is_light_canvas and h_color_hex.upper() == "#000000" else "#000000")
+        header_outline = _hex_to_ass_color(h_outline_hex)
+
+        h_bg_hex = style.get("hook_bg_color") or "#000000"
+        default_show_bg = False if is_light_canvas else True
+        show_bg = bool(style.get("hook_show_bg", default_show_bg))
+        h_bg_alpha = 80 if show_bg else 255
+        header_back = _hex_to_ass_color(h_bg_hex, alpha=h_bg_alpha)
+
+        h_size = int(style.get("hook_font_size", max(24, int(font_size * 0.85))))
+
+        # Position (top: 8, center: 5, bottom: 2)
+        pos = str(style.get("hook_position", "top")).lower()
+        if pos == "center":
+            h_align = 5
+            h_margin_v = int(PLAY_RES_Y * float(style.get("hook_margin_v_ratio", 0.45)))
+        elif pos == "bottom":
+            h_align = 2
+            h_margin_v = int(PLAY_RES_Y * float(style.get("hook_margin_v_ratio", 0.15)))
+        else: # "top" default
+            h_align = 8
+            # In light canvas mode, top margin is 0.08 so text sits inside the white top bar
+            top_ratio = 0.08 if is_light_canvas else 0.04
+            h_margin_v = int(PLAY_RES_Y * float(style.get("hook_margin_v_ratio", top_ratio)))
+
+        border_style = 3 if show_bg else 1
+        stroke_w = 1 if show_bg else (0 if is_light_canvas else 3)
+
+        styles_section += (
+            f"Style: Header,{h_font_name},{h_size},{header_primary},"
+            f"{header_secondary},{header_outline},{header_back},"
+            f"-1,0,0,0,100,100,0,0,{border_style},{stroke_w},0,{h_align},20,20,{h_margin_v},1\n"
+        )
 
     # --- Events ---
     events_header = (
@@ -340,6 +404,14 @@ def generate_ass_content(
         base_font_size=font_size,
         time_offset_ms=time_offset_ms,
     )
+
+    if hook_text_clean and words:
+        max_end_ms = max((w.get("end", 0) for w in words), default=10000) + time_offset_ms + 2000
+        start_str = _format_ass_time(time_offset_ms)
+        end_str = _format_ass_time(max_end_ms)
+        safe_hook = hook_text_clean.replace("{", "").replace("}", "")
+        header_event = f"Dialogue: 0,{start_str},{end_str},Header,,0,0,0,,{safe_hook}"
+        dialogue_lines.insert(0, header_event)
 
     return script_info + styles_section + events_header + "\n".join(dialogue_lines) + "\n"
 

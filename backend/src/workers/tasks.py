@@ -255,6 +255,7 @@ async def transcribe_video_task(
                         "text": seg.text,
                         "relevance_score": seg.relevance_score,
                         "reasoning": seg.reasoning,
+                        "hook_text": seg.hook_text or "",
                     }
                     for seg in analysis_result.most_relevant_segments
                 ]
@@ -304,6 +305,7 @@ async def transcribe_video_task(
                         reasoning=seg["reasoning"],
                         clip_order=i + 1,
                         words_json=_json.dumps(_clip_words, ensure_ascii=False),
+                        hook_text=seg.get("hook_text", ""),
                     )
                     clip_ids.append(clip_id)
 
@@ -402,6 +404,7 @@ async def transcribe_video_task(
                     words_json=_json.dumps(clip_info.get("words", []), ensure_ascii=False),
                     pycaps_template=pycaps_template,
                     thumbnail_filename=clip_info.get("thumbnail_filename"),
+                    hook_text=clip_info.get("hook_text", ""),
                 )
                 clip_ids.append(clip_id)
 
@@ -660,6 +663,7 @@ async def generate_clips_from_transcript(
                     "text": clip["text"],  # Use the edited text from DB
                     "relevance_score": clip.get("relevance_score", 0.5),
                     "reasoning": clip.get("reasoning", ""),
+                    "hook_text": clip.get("hook_text") or clip.get("title") or "",
                 }
                 for clip in sorted(clips, key=lambda x: x.get("clip_order", 0))
             ]
@@ -888,6 +892,7 @@ async def retry_clips_analysis(
                     reasoning=seg["reasoning"],
                     clip_order=i + 1,
                     words_json=_json.dumps(_clip_words, ensure_ascii=False),
+                    hook_text=seg.get("hook_text", ""),
                 )
                 clip_ids.append(clip_id)
 

@@ -55,6 +55,7 @@ interface TaskDetails {
   font_size?: number;
   font_color?: string;
   source_video_url?: string;
+  clips?: any[];
 }
 
 type StageKey = "download" | "transcript" | "analysis" | "clips" | "finalizing";
@@ -743,7 +744,7 @@ export default function TaskPage() {
     );
   }
 
-  if (!session?.user) {
+  if (!jwt) {
     return (
       <div className="min-h-screen bg-white p-4">
         <div className="max-w-6xl mx-auto">

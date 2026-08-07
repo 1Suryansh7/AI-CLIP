@@ -597,6 +597,44 @@ async def update_clip_template(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.put("/{task_id}/clips/{clip_id}/hook")
+async def update_clip_hook(
+    task_id: str,
+    clip_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the title and on-screen hook_text for a clip."""
+    user_id = _require_user_id(request)
+    try:
+        data = await request.json()
+        title = data.get("title")
+        hook_text = data.get("hook_text")
+
+        task_service = TaskService(db)
+        task = await task_service.task_repo.get_task_by_id(db, task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        if task["user_id"] != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+        updates = {}
+        if title is not None:
+            updates["title"] = title.strip()
+        if hook_text is not None:
+            updates["hook_text"] = hook_text.strip()
+
+        if updates:
+            await task_service.clip_repo.update_clip(db, clip_id, updates)
+
+        return {"message": "Clip hook updated successfully", "task_id": task_id, "clip_id": clip_id, **updates}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating clip hook: {e}")
+        raise HTTPException(status_code=500, detail=f"Error updating clip hook: {str(e)}")
+
+
 @router.post("/{task_id}/clips/{clip_id}/render")
 async def render_clip(
     task_id: str,
@@ -656,6 +694,8 @@ async def render_clip(
         task_subtitle_style = task_metadata.get("subtitle_style", {})
         request_subtitle_style = caption_options.get("subtitle_style", {})
         merged_subtitle_style = {**task_subtitle_style, **request_subtitle_style}
+        if clip_data.get("hook_text"):
+            merged_subtitle_style["hook_text"] = clip_data.get("hook_text")
         if merged_subtitle_style:
             caption_options["subtitle_style"] = merged_subtitle_style
 

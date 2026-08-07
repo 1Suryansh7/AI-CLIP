@@ -109,7 +109,7 @@ export function ClipPreviewModal({
   // Update player template when selection changes
   useEffect(() => {
     if (playerRef.current) {
-      playerRef.current.setTemplate(selectedTemplate);
+      playerRef.current.setTemplate?.(selectedTemplate);
     }
   }, [selectedTemplate]);
 

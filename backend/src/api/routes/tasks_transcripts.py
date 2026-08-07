@@ -211,12 +211,56 @@ async def get_transcript_ass(task_id: str, request: Request, db: AsyncSession = 
         if template not in AVAILABLE_TEMPLATES:
             template = DEFAULT_TEMPLATE
 
+        font_family_param = request.query_params.get("font_family")
+        font_color_param = request.query_params.get("font_color")
+        highlight_color_param = request.query_params.get("highlight_color")
+        margin_v_ratio_param = request.query_params.get("margin_v_ratio")
+        hook_text_param = request.query_params.get("hook_text")
+        hook_font_family_param = request.query_params.get("hook_font_family")
+        hook_font_color_param = request.query_params.get("hook_font_color")
+        hook_position_param = request.query_params.get("hook_position")
+        hook_font_size_param = request.query_params.get("hook_font_size")
+        hook_show_bg_param = request.query_params.get("hook_show_bg")
+        pad_color_param = request.query_params.get("pad_color")
+        canvas_style_param = request.query_params.get("canvas_style")
+
         task_subtitle_style = dict(metadata.get("subtitle_style") or {})
         if font_size_param is not None:
             try:
                 task_subtitle_style["font_size"] = max(8, int(font_size_param))
             except ValueError:
                 pass
+        if font_family_param:
+            task_subtitle_style["font_family"] = font_family_param.strip()
+        if font_color_param:
+            task_subtitle_style["font_color"] = font_color_param.strip()
+        if highlight_color_param:
+            task_subtitle_style["highlight_color"] = highlight_color_param.strip()
+        if margin_v_ratio_param is not None:
+            try:
+                task_subtitle_style["margin_v_ratio"] = max(0.05, min(0.90, float(margin_v_ratio_param)))
+            except ValueError:
+                pass
+        if hook_text_param is not None:
+            task_subtitle_style["hook_text"] = hook_text_param.strip()
+        if pad_color_param:
+            task_subtitle_style["pad_color"] = pad_color_param.strip()
+        if canvas_style_param:
+            task_subtitle_style["canvas_style"] = canvas_style_param.strip()
+        if hook_font_family_param:
+            task_subtitle_style["hook_font_family"] = hook_font_family_param.strip()
+        if hook_font_color_param:
+            task_subtitle_style["hook_font_color"] = hook_font_color_param.strip()
+        if hook_position_param:
+            task_subtitle_style["hook_position"] = hook_position_param.strip()
+        if hook_font_size_param:
+            try:
+                task_subtitle_style["hook_font_size"] = max(14, min(60, int(hook_font_size_param)))
+            except ValueError:
+                pass
+        if hook_show_bg_param is not None:
+            task_subtitle_style["hook_show_bg"] = hook_show_bg_param.lower() in ("true", "1", "yes")
+
         ass_content = generate_ass_content(
             words=words,
             subtitle_style=task_subtitle_style or None,

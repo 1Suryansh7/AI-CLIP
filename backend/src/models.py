@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from sqlalchemy import Column, String, DateTime, ForeignKey, CheckConstraint, ARRAY, Boolean, Float, Integer, Text, text
+from sqlalchemy import Column, String, DateTime, ForeignKey, CheckConstraint, ARRAY, Boolean, Float, Integer, Text, text, text as sql_text
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.sql import func
 import uuid
@@ -83,6 +83,7 @@ class User(Base):
 
     # Relationships
     tasks: Mapped[List["Task"]] = relationship("Task", back_populates="user", cascade="all, delete-orphan")
+    campaigns: Mapped[List["ClippingCampaign"]] = relationship("ClippingCampaign", back_populates="user", cascade="all, delete-orphan")
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -137,11 +138,56 @@ class Source(Base):
       else:
         return "video_url"
 
+class ClippingCampaign(Base):
+    __tablename__ = "clipping_campaigns"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid_string)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    campaign_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    
+    # Requirement and Source Links
+    google_doc_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    drive_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    extracted_rules: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    # Processed Rules
+    required_bio_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    required_bio_link: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    mandatory_tags: Mapped[Optional[str]] = mapped_column(Text, nullable=True)     # Comma separated or JSON string
+    mandatory_hashtags: Mapped[Optional[str]] = mapped_column(Text, nullable=True) # Comma separated or JSON string
+    caption_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    # Dedicated Instagram Account
+    instagram_username: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    instagram_password_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    # Template & Style Customization
+    clip_mode: Mapped[str] = mapped_column(String(20), server_default=sql_text("'highlights'"), nullable=False) # 'highlights' or 'full_length'
+    font_family: Mapped[Optional[str]] = mapped_column(String(100), server_default=sql_text("'TikTokSans-Regular'"), nullable=True)
+    font_size: Mapped[Optional[int]] = mapped_column(Integer, server_default=sql_text("24"), nullable=True)
+    font_color: Mapped[Optional[str]] = mapped_column(String(7), server_default=sql_text("'#FFFFFF'"), nullable=True)
+    stroke_color: Mapped[Optional[str]] = mapped_column(String(7), server_default=sql_text("'#000000'"), nullable=True)
+    subtitle_template: Mapped[Optional[str]] = mapped_column(String(50), server_default=sql_text("'word-focus'"), nullable=True)
+    highlight_color: Mapped[Optional[str]] = mapped_column(String(7), server_default=sql_text("'#FFFF00'"), nullable=True)
+    margin_v_ratio: Mapped[Optional[float]] = mapped_column(Float, server_default=sql_text("0.42"), nullable=True)
+
+    # Financial Settings
+    rate_per_1k_views: Mapped[float] = mapped_column(Float, nullable=False, server_default=sql_text("3.5"))
+    status: Mapped[str] = mapped_column(String(20), server_default=sql_text("'active'"), nullable=False)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="campaigns")
+    clips: Mapped[List["GeneratedClip"]] = relationship("GeneratedClip", back_populates="campaign")
+
 class GeneratedClip(Base):
     __tablename__ = "generated_clips"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid_string)
     task_id: Mapped[str] = mapped_column(String(36), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    campaign_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("clipping_campaigns.id", ondelete="SET NULL"), nullable=True)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     start_time: Mapped[str] = mapped_column(String(20), nullable=False)  # MM:SS format
@@ -152,8 +198,17 @@ class GeneratedClip(Base):
     reasoning: Mapped[Optional[str]] = mapped_column(Text, nullable=True) # AI reasoning for selection
     clip_order: Mapped[int] = mapped_column(Integer, nullable=False)     # Order within the task
     thumbnail_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True) # JPEG thumbnail filename
+    
+    # Social publishing & Analytics tracking
+    instagram_media_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    view_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=sql_text("0"))
+    estimated_payout: Mapped[float] = mapped_column(Float, nullable=False, server_default=sql_text("0.0"))
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
     task: Mapped["Task"] = relationship("Task", back_populates="generated_clips")
+    campaign: Mapped[Optional["ClippingCampaign"]] = relationship("ClippingCampaign", back_populates="clips")
+

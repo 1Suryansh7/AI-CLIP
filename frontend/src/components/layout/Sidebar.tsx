@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Sparkles, Video, Wand2, Settings, X } from "lucide-react";
+import { LayoutDashboard, Sparkles, Video, Wand2, Settings, X, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useJwt } from "@/contexts/jwt-context";
 
@@ -12,6 +12,7 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Analysis", href: "/analysis", icon: Sparkles },
   { name: "Library", href: "/library", icon: Video },
+  { name: "Whop Campaigns", href: "/campaigns", icon: DollarSign },
   { name: "AI Presets", href: "/presets", icon: Wand2 },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
@@ -51,8 +52,9 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       .catch(() => {});
   }, [jwt, apiUrl, apiFetch]);
 
-  const planName = subscription?.plan_name ?? subscription?.plan?.toUpperCase() ?? "FREE";
-  const isUnlimited = subscription?.clip_generations?.limit === "Unlimited";
+  const rawPlanName = subscription?.plan_name ?? subscription?.plan ?? "i made this shyt gng";
+  const planName = rawPlanName.toLowerCase() === "free" ? "i made this shyt gng" : rawPlanName;
+  const isUnlimited = subscription?.clip_generations?.limit === "Unlimited" || subscription?.plan === "free" || !subscription?.clip_generations?.limit;
   const clipsUsed = subscription?.clip_generations?.used ?? 0;
   const clipsLimit = subscription?.clip_generations?.limit;
   const clipsRemaining = subscription?.clip_generations?.remaining;

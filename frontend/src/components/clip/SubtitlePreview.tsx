@@ -87,7 +87,7 @@ export function SubtitlePreview({
   className = "",
 }: SubtitlePreviewProps) {
   const [css, setCss] = useState<string>(defaultSubtitleStyles);
-  const [verticalAlign, setVerticalAlign] = useState<VerticalAlign>({ align: "bottom" });
+  const [verticalAlign, setVerticalAlign] = useState<VerticalAlign>({ align: "center", offset: -0.08 });
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
@@ -201,24 +201,29 @@ export function SubtitlePreview({
 }
 
 // Fallback CSS used only when the backend /styles fetch fails.
-// No .segment background — the real pycaps templates don't have one.
+// High-contrast solid black outline with mandatory white text and yellow target highlight.
 export const defaultSubtitleStyles = `
 .word {
   font-family: sans-serif;
-  font-size: 24px;
-  font-weight: 800;
+  font-size: 28px;
+  font-weight: 900;
   color: #ffffff;
   text-transform: uppercase;
+  -webkit-text-stroke: 3px #000000;
   text-shadow:
-    -2px -2px 2px #000,
-     2px -2px 2px #000,
-    -2px  2px 2px #000,
-     2px  2px 2px #000;
+    -3px -3px 0 #000,
+     3px -3px 0 #000,
+    -3px  3px 0 #000,
+     3px  3px 0 #000,
+    -3px  0px 0 #000,
+     3px  0px 0 #000,
+     0px -3px 0 #000,
+     0px  3px 0 #000;
   padding: 4px 4px;
   display: inline-block;
 }
 .word-active, .word-being-narrated {
-  background-color: #f76f00;
-  border-radius: 5%;
+  color: #ffff00 !important;
+  background-color: transparent;
 }
 `;

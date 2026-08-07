@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional, Tuple
 import asyncio
 import logging
 import re
+import os
 
 from pydantic_ai import Agent
 from pydantic import BaseModel, Field
@@ -16,12 +17,14 @@ from .repositories.prompt_repository import PromptRepository
 
 logger = logging.getLogger(__name__)
 config = Config()
-SUPPORTED_AI_PROVIDERS = {"openai", "google", "anthropic", "zai"}
+SUPPORTED_AI_PROVIDERS = {"openai", "google", "anthropic", "zai", "ollama", "hermes"}
 DEFAULT_AI_MODELS = {
     "openai": "gpt-5-mini",
     "google": "gemini-2.5-pro",
     "anthropic": "claude-4-sonnet",
     "zai": "glm-5",
+    "ollama": "hermes3",
+    "hermes": "hermes3",
 }
 ZAI_OPENAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4"
 
@@ -116,14 +119,25 @@ def _build_transcript_agent(
     # Get system prompt from repository based on prompt_id and clips_count
     system_prompt = PromptRepository.get_system_prompt(prompt_id, clips_count)
 
-    if selected_provider == "openai":
+    if selected_provider in {"openai", "ollama", "hermes"}:
         from pydantic_ai.models.openai import OpenAIModel
         from pydantic_ai.providers.openai import OpenAIProvider
 
+        openai_base_url = os.getenv("OPENAI_BASE_URL") or os.getenv("OPENAI_API_BASE") or os.getenv("OLLAMA_BASE_URL")
+        if selected_provider in {"ollama", "hermes"} and not openai_base_url:
+            openai_base_url = "http://localhost:11434/v1"
+
         resolved_key = resolved_key or str(config.openai_api_key or "").strip()
+        if not resolved_key and (openai_base_url or selected_provider in {"ollama", "hermes"}):
+            resolved_key = "ollama"
+
         if not resolved_key:
             raise ValueError("OpenAI provider selected but no API key is configured")
-        provider = OpenAIProvider(api_key=resolved_key)
+
+        if openai_base_url:
+            provider = OpenAIProvider(api_key=resolved_key, base_url=openai_base_url)
+        else:
+            provider = OpenAIProvider(api_key=resolved_key)
         model = OpenAIModel(selected_model, provider=provider)
     elif selected_provider == "zai":
         from pydantic_ai.models.openai import OpenAIModel
@@ -136,12 +150,12 @@ def _build_transcript_agent(
         model = OpenAIModel(selected_model, provider=provider)
     elif selected_provider == "google":
         from pydantic_ai.models.google import GoogleModel
-        from pydantic_ai.providers.google_gla import GoogleGLAProvider
+        from pydantic_ai.providers.google import GoogleProvider
 
         resolved_key = resolved_key or str(config.google_api_key or "").strip()
         if not resolved_key:
             raise ValueError("Google provider selected but no API key is configured")
-        provider = GoogleGLAProvider(api_key=resolved_key)
+        provider = GoogleProvider(api_key=resolved_key)
         model = GoogleModel(selected_model, provider=provider)
     else:
         from pydantic_ai.models.anthropic import AnthropicModel
@@ -302,3 +316,80 @@ def get_most_relevant_parts_sync(
         prompt_id=prompt_id,
         clips_count=clips_count,
     ))
+
+
+class CampaignCaptionPayload(BaseModel):
+    """Hermes AI generated campaign caption payload complying with client rules."""
+    caption: str = Field(description="Full Instagram Reel caption text with natural line breaks")
+    hook_text: str = Field(description="Viral opening hook (3-6 words)")
+    tagged_handles: List[str] = Field(description="List of mandatory user handles mentioned in caption, e.g., ['@client_handle']")
+    hashtags: List[str] = Field(description="5-8 hyper-relevant hashtags, e.g., ['#niche', '#viral']")
+    cta_text: str = Field(description="Clear Call-To-Action directing viewers to the bio link")
+
+
+async def generate_campaign_caption_with_hermes(
+    transcript: str,
+    extracted_rules: Optional[str] = None,
+    mandatory_tags: Optional[str] = None,
+    mandatory_hashtags: Optional[str] = None,
+    custom_instructions: Optional[str] = None,
+    ai_provider: Optional[str] = None,
+    ai_model: Optional[str] = None,
+) -> CampaignCaptionPayload:
+    """
+    Uses Hermes 3 / LLM engine to generate a viral, human-sounding caption
+    strictly enforcing Whop client campaign guidelines and mandatory tags.
+    """
+    system_prompt = f"""You are a top 1% viral short-form content creator & social media manager.
+Your task is to write a high-converting, 100% human-sounding Instagram Reel caption.
+
+CRITICAL CAMPAIGN RULES & CONSTRAINTS:
+1. Client Requirements / Doc Rules: {extracted_rules or 'None specified'}
+2. Mandatory Tagged Handles: {mandatory_tags or 'None'} (MUST be included in the caption)
+3. Mandatory Hashtags: {mandatory_hashtags or 'None'}
+4. Custom Creator Instructions: {custom_instructions or 'Focus on curiosity and high CTR'}
+
+HUMAN VOICE RULES:
+- Write casually, like a real human texting or sharing a cool insight.
+- DO NOT use corporate AI clichés ("game-changer", "delve", "thrilled", "in today's digital landscape").
+- Use short line breaks for easy mobile reading. Max 2 emojis total.
+- Include a strong Call to Action telling viewers to click the link in bio.
+"""
+
+    # Build agent with provider/model resolution
+    agent_tuple = _build_transcript_agent(
+        ai_provider=ai_provider,
+        ai_model=ai_model,
+    )
+    # Re-instantiate agent with custom schema
+    caption_agent = Agent(
+        model=agent_tuple[0].model,
+        output_type=CampaignCaptionPayload,
+        system_prompt=system_prompt,
+    )
+
+    prompt = f"""Generate a viral Instagram caption for this clip transcript:
+
+TRANSCRIPT:
+{transcript}"""
+
+    try:
+        res = await caption_agent.run(prompt)
+        data = getattr(res, "data", None) or getattr(res, "output", None)
+        if data:
+            return data
+    except Exception as e:
+        logger.error(f"Hermes campaign caption generation failed: {e}")
+
+    # Fallback response if LLM call fails
+    tags_list = [t.strip() for t in (mandatory_tags or "").split(",") if t.strip()]
+    hashtags_list = [h.strip() for h in (mandatory_hashtags or "").split(",") if h.strip()]
+    
+    return CampaignCaptionPayload(
+        caption=f"Check out this moment! {' '.join(tags_list)}\n\nLink in bio for more! 👇",
+        hook_text="You Won't Believe This",
+        tagged_handles=tags_list,
+        hashtags=hashtags_list or ["#reels", "#viral"],
+        cta_text="Check the link in bio for full access!"
+    )
+

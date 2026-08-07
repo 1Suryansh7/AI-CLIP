@@ -81,6 +81,7 @@ class VideoProcessor:
                 "bitrate": "8000k",
                 "audio_bitrate": "256k",
                 "preset": "medium",
+                "fps": 60,
                 "ffmpeg_params": ["-crf", "20", "-pix_fmt", "yuv420p", "-profile:v", "main", "-level", "4.1"]
             },
             "medium": {
@@ -89,6 +90,7 @@ class VideoProcessor:
                 "bitrate": "4000k",
                 "audio_bitrate": "192k",
                 "preset": "fast",
+                "fps": 60,
                 "ffmpeg_params": ["-crf", "23", "-pix_fmt", "yuv420p"]
             }
         }
@@ -1040,7 +1042,7 @@ def crop_clip_to_ratio(
             'audio_codec': 'aac',
             'bitrate': '8M',
             'preset': 'medium',
-            'fps': 30,
+            'fps': 60,
         }
         cropped.write_videofile(str(output_path), logger=None, **encoding_settings)
 
@@ -1586,14 +1588,11 @@ def create_optimized_clip(
         if use_pycaps and pycaps_template:
             try:
                 from .ass_generator import generate_ass_content, AVAILABLE_TEMPLATES as ASS_TEMPLATES, DEFAULT_TEMPLATE as ASS_DEFAULT
-                from .ass_renderer import burn_ass_subtitles
+                from .ass_renderer import burn_ass_subtitles_direct
 
                 effective_template = pycaps_template if pycaps_template in ASS_TEMPLATES else ASS_DEFAULT
 
-                # First, create the clip without subtitles
-                temp_output = output_path.with_suffix('.temp.mp4')
-
-                # Load and process video
+                # Load video for duration check and face crop region detection
                 video = VideoFileClip(str(video_path))
 
                 if start_time >= video.duration:
@@ -1602,33 +1601,11 @@ def create_optimized_clip(
                     return False
 
                 end_time = min(end_time, video.duration)
-                clip = video.subclipped(start_time, end_time)
 
-                # Get optimal crop
+                # Get optimal crop coordinates
                 x_offset, y_offset, new_width, new_height = detect_optimal_crop_region(
                     video, start_time, end_time, target_ratio=target_ratio
                 )
-
-                cropped_clip = clip.cropped(
-                    x1=x_offset, y1=y_offset,
-                    x2=x_offset + new_width, y2=y_offset + new_height
-                )
-
-                # Write temporary clip without subtitles
-                processor = VideoProcessor(font_family, font_size, font_color)
-                encoding_settings = processor.get_optimal_encoding_settings("high")
-
-                cropped_clip.write_videofile(
-                    str(temp_output),
-                    temp_audiofile='temp-audio.m4a',
-                    remove_temp=True,
-                    logger=None,
-                    **encoding_settings
-                )
-
-                # Cleanup MoviePy objects
-                cropped_clip.close()
-                clip.close()
                 video.close()
 
                 # Load word-level transcript and build clip-relative words (ms)
@@ -1647,30 +1624,34 @@ def create_optimized_clip(
                 ]
 
                 # Extract subtitle_style from caption_options if provided
-                ass_subtitle_style = (caption_options or {}).get("subtitle_style") if caption_options else None
+                merged_style = dict((caption_options or {}).get("subtitle_style") or (subtitle_style or {}))
+                pad_color = str(merged_style.get("pad_color") or merged_style.get("canvas_color") or "black")
 
                 ass_content = generate_ass_content(
                     words=clip_words,
-                    subtitle_style=ass_subtitle_style,
+                    subtitle_style=merged_style or None,
                     template=effective_template,
                 )
 
-                # Burn ASS subtitles via ffmpeg
-                success = burn_ass_subtitles(
-                    input_path=temp_output,
+                # Ultra-fast single-pass FFmpeg burn (seeking + crop + scale + ASS subtitles + 60fps)
+                success = burn_ass_subtitles_direct(
+                    video_path=video_path,
                     output_path=output_path,
+                    start_time=start_time,
+                    end_time=end_time,
+                    crop_x=x_offset,
+                    crop_y=y_offset,
+                    crop_w=new_width,
+                    crop_h=new_height,
                     ass_content=ass_content,
+                    pad_color=pad_color,
                 )
-
-                # Clean up temp file
-                if temp_output.exists():
-                    temp_output.unlink()
 
                 if success:
                     logger.info(f"Successfully created clip with ASS subtitles: {output_path}")
                     return True
                 else:
-                    logger.warning(f"ASS subtitle burn failed, falling back to standard subtitles")
+                    logger.warning(f"Single-pass ASS burn failed, falling back to standard subtitles")
                     # Fall through to standard subtitle rendering
 
             except Exception as e:
@@ -1810,6 +1791,12 @@ def create_clips_from_segments(
             clip_filename = f"clip_{i+1}_{segment['start_time'].replace(':', '')}-{segment['end_time'].replace(':', '')}.mp4"
             clip_path = output_dir / clip_filename
 
+            seg_caption_options = dict(caption_options or {})
+            seg_subtitle_style = dict(seg_caption_options.get("subtitle_style") or subtitle_style or {})
+            if segment.get("hook_text"):
+                seg_subtitle_style["hook_text"] = segment.get("hook_text")
+            seg_caption_options["subtitle_style"] = seg_subtitle_style
+
             clip_errors: List[str] = []
             success = create_optimized_clip(
                 video_path,
@@ -1820,11 +1807,11 @@ def create_clips_from_segments(
                 font_family,
                 font_size,
                 font_color,
-                subtitle_style,
+                seg_subtitle_style,
                 error_collector=clip_errors,
                 use_pycaps=use_pycaps,
                 pycaps_template=pycaps_template,
-                caption_options=caption_options,
+                caption_options=seg_caption_options,
                 target_ratio=target_ratio,
             )
 

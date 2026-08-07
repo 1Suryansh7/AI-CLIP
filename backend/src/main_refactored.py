@@ -25,6 +25,7 @@ from .api.routes import subscriptions
 from .api.routes import tasks_clips
 from .api.routes import tasks_transcripts
 from .api.routes import auth as auth_routes
+from .api.routes import campaigns
 
 # Ensure the log directory exists before configuring file logging.
 log_dir = Path("logs")
@@ -97,6 +98,7 @@ app.include_router(tasks.router)
 app.include_router(subscriptions.router)
 app.include_router(tasks_clips.router)
 app.include_router(tasks_transcripts.router)
+app.include_router(campaigns.router)
 
 # Keep existing utility endpoints
 from .api.routes.media import router as media_router

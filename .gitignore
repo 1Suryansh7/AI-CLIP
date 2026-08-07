@@ -1,17 +1,122 @@
-.env.local
-.DS_Store
-__pycache__
-*.egg-info
-logs/
-temp/
+# ==========================================
+# Teek Monorepo - Comprehensive .gitignore
+# Prevents leaking sensitive keys, envs, media & build artifacts
+# ==========================================
+
+# ------------------------------------------
+# Environment & Secrets (CRITICAL FOR SAFETY)
+# ------------------------------------------
 .env
-*.m4a
+.env.*
+!.env.example
+!.env.template
+!.env.sample
+*.pem
+*.key
+*.pfx
+*.p12
+*.crt
+credentials.json
+client_secret*.json
+service_account*.json
+cookies.txt
+cookies/
+*cookie*.txt
+
+# ------------------------------------------
+# Next.js / Frontend Build & Cache
+# ------------------------------------------
+.next/
+frontend/.next/
+out/
+build/
+dist/
+node_modules/
+frontend/node_modules/
+*.tsbuildinfo
+next-env.d.ts
+frontend/src/generated/prisma
+
+# ------------------------------------------
+# Logs & Debugging
+# ------------------------------------------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ------------------------------------------
+# Python & Backend Artifacts
+# ------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ------------------------------------------
+# Backend Media & Heavy Processing Directories
+# ------------------------------------------
 backend/uploads/
 backend/clips/
-backend/.cache/
-backend/models/
 backend/downloads/
-docs/
-design/
+backend/temp/
+backend/models/
+backend/.cache/
+temp/
+tmp/
+video
+video*
+video/
+video1/
+fonts1/
+
+# ------------------------------------------
+# Audio & Video Media Files (Prevent leaking test assets)
+# ------------------------------------------
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.webm
+*.flv
+*.mp3
+*.wav
+*.m4a
+*.aac
+*.ogg
+
+# ------------------------------------------
+# Database & Storage
+# ------------------------------------------
+*.sqlite
+*.sqlite3
+*.db
+
+# ------------------------------------------
+# OS & System Files
+# ------------------------------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ------------------------------------------
+# IDEs & AI Agent Workspace Settings
+# ------------------------------------------
 .vscode/
+.idea/
 .claude/
+.cursor/
+.zed/
+.antigravity/
+.gemini/
+.brain/

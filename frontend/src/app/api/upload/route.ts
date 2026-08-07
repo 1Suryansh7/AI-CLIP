@@ -11,16 +11,18 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(request: NextRequest) {
   const backendUrl = process.env.BACKEND_INTERNAL_URL || "http://backend:8000";
-  const contentType = request.headers.get("content-type");
 
-  const backendResponse = await fetch(`${backendUrl}/upload`, {
-    method: "POST",
-    headers: contentType ? { "content-type": contentType } : {},
-    body: request.body,
-    // @ts-ignore – required for request body streaming in Node.js fetch
-    duplex: "half",
-  });
+  try {
+    const formData = await request.formData();
+    const backendResponse = await fetch(`${backendUrl}/upload`, {
+      method: "POST",
+      body: formData,
+    });
 
-  const data = await backendResponse.json();
-  return Response.json(data, { status: backendResponse.status });
+    const data = await backendResponse.json();
+    return Response.json(data, { status: backendResponse.status });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Upload failed";
+    return Response.json({ detail: message }, { status: 500 });
+  }
 }

@@ -124,9 +124,8 @@ class SubscriptionService:
 
         logger.info(f"Checking limits for user {user_id}: plan='{plan}', clip_count={clip_count}, will_transcribe={will_transcribe}")
 
-        # Business plan has unlimited
-        if plan == "business":
-            logger.info(f"User {user_id} has business plan - allowing unlimited processing")
+        if config.disable_usage_limits or plan == "business":
+            logger.info(f"Usage limits disabled or user {user_id} has business plan - allowing processing")
             return {"can_process": True, "reason": None, "estimated_minutes": 0}
 
         logger.info(f"User {user_id} plan '{plan}' - checking limits: transcription_limit={plan_config.get('transcription_minutes')}, clip_limit={plan_config.get('clip_generations')}")

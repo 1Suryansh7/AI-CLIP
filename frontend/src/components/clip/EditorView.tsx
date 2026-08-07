@@ -27,7 +27,22 @@ export function EditorView() {
   const [activeTab, setActiveTab] = useState<"insights" | "transcript">("insights");
   const [selectedAspectRatio, setSelectedAspectRatio] = useState("9:16");
   const [selectedCaptionStyle, setSelectedCaptionStyle] = useState("bold-yellow");
-  const [exportHealth] = useState(75);
+  const [fontColor, setFontColor] = useState("#FFFFFF");
+  const [highlightColor, setHighlightColor] = useState("#FFFF00");
+  const [exportHealth] = useState(100);
+
+  const FONT_COLORS = [
+    { name: "White", hex: "#FFFFFF" },
+    { name: "Yellow", hex: "#FFFF00" },
+    { name: "Cyan", hex: "#00FFFF" },
+    { name: "Magenta", hex: "#FF00FF" },
+    { name: "Orange", hex: "#FF5722" },
+  ];
+
+  const HIGHLIGHT_COLORS = [
+    { name: "Pure Yellow", hex: "#FFFF00" },
+    { name: "Neon Green", hex: "#00FF00" },
+  ];
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -211,6 +226,44 @@ export function EditorView() {
                 </div>
               </div>
 
+              {/* Font & Highlight Colors */}
+              <div className="glass rounded-xl p-4 space-y-4">
+                <div>
+                  <h3 className="font-semibold text-white mb-2 text-sm">FONT COLOR</h3>
+                  <div className="flex items-center gap-2">
+                    {FONT_COLORS.map((c) => (
+                      <button
+                        key={c.hex}
+                        onClick={() => setFontColor(c.hex)}
+                        title={c.name}
+                        className={`w-8 h-8 rounded-full border-2 transition-transform ${
+                          fontColor === c.hex ? "scale-110 border-white ring-2 ring-primary" : "border-transparent hover:scale-105"
+                        }`}
+                        style={{ backgroundColor: c.hex }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold text-white mb-2 text-sm">TARGET HIGHLIGHT COLOR</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {HIGHLIGHT_COLORS.map((c) => (
+                      <button
+                        key={c.hex}
+                        onClick={() => setHighlightColor(c.hex)}
+                        className={`p-2 rounded-lg border-2 text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                          highlightColor === c.hex ? "border-primary bg-primary/10 text-white" : "border-border text-gray-400 hover:text-white"
+                        }`}
+                      >
+                        <span className="w-3 h-3 rounded-full border border-black/40" style={{ backgroundColor: c.hex }} />
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               {/* Aspect Ratio */}
               <div className="glass rounded-xl p-4">
                 <h3 className="font-semibold text-white mb-4 text-sm">ASPECT RATIO</h3>
@@ -238,11 +291,20 @@ export function EditorView() {
                 Apply to Clip
               </button>
 
-              {/* Export Health */}
+              {/* Export Health & Quality Settings */}
               <div className="glass rounded-xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-white text-sm">EXPORT HEALTH</h3>
-                  <span className="text-lg font-bold text-primary">{exportHealth}%</span>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-semibold text-white text-sm">EXPORT PRESET</h3>
+                  <span className="text-xs font-mono font-bold bg-green-500/20 text-green-400 px-2 py-1 rounded border border-green-500/30">
+                    1080p @ 60 FPS
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  High-contrast solid stroke, dead-center chin anchor, 1080p 60fps render format.
+                </p>
+                <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+                  <span>Export Health</span>
+                  <span className="font-bold text-primary">{exportHealth}%</span>
                 </div>
                 <div className="h-2 bg-muted rounded-full overflow-hidden">
                   <div

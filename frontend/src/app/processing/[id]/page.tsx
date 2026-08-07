@@ -85,7 +85,7 @@ export default function ProcessingPage() {
             clips_count: data.clips_count,
           }));
         } catch (error) {
-          console.error("Failed to parse SSE status:", error);
+          console.warn("Failed to parse SSE status:", error);
         }
       });
 
@@ -118,7 +118,7 @@ export default function ProcessingPage() {
             eventSource.close();
           }
         } catch (error) {
-          console.error("Failed to parse SSE progress:", error);
+          console.warn("Failed to parse SSE progress:", error);
         }
       });
 
@@ -148,12 +148,12 @@ export default function ProcessingPage() {
             clips_count: data.clips_count,
           }));
         } catch (error) {
-          console.error("Failed to parse SSE data:", error);
+          console.warn("Failed to parse SSE data:", error);
         }
       };
 
       eventSource.onerror = (error) => {
-        console.error("SSE error:", error);
+        console.warn("SSE event closed, switching to fallback polling:", error);
         eventSource.close();
 
         // Fallback to polling if SSE fails
@@ -180,7 +180,7 @@ export default function ProcessingPage() {
               }
             }
           } catch (error) {
-            console.error("Polling error:", error);
+            console.warn("Polling error:", error);
           }
         }, 3000);
 

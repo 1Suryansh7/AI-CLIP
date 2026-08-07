@@ -63,17 +63,19 @@ class Config:
             os.getenv("MEDIAPIPE_FACE_MODEL_AUTO_DOWNLOAD", "true") or "true"
         ).strip().lower() in {"1", "true", "yes", "on"}
 
+        self.disable_usage_limits = env_bool("NEXT_PUBLIC_DISABLE_USAGE_LIMITS", "true") or env_bool("DISABLE_USAGE_LIMITS", "true")
+
         # Subscription plans configuration
         # Minutes are stored as integers (e.g., 600 = 10 hours)
         self.plans = {
             "free": {
-                "name": "Free",
+                "name": "i made this shyt gng",
                 "price_monthly": 0,
-                "transcription_minutes": 0,
-                "clip_generations": 5,
-                "watermark": True,
-                "custom_font": False,
-                "custom_size": False,
+                "transcription_minutes": None,  # Unlimited
+                "clip_generations": None,  # Unlimited
+                "watermark": False,
+                "custom_font": True,
+                "custom_size": True,
             },
             "starter": {
                 "name": "Starter",

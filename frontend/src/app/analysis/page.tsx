@@ -17,8 +17,8 @@ export default function AnalysisPage() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const [videoUrl, setVideoUrl] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [transcriptionMethod, setTranscriptionMethod] = useState<"ai" | "upload" | "paste">("ai");
-  const [fileName, setFileName] = useState<string | null>(null);
   const [srtFile, setSrtFile] = useState<File | null>(null);
   const [pastedTranscript, setPastedTranscript] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
@@ -42,21 +42,20 @@ export default function AnalysisPage() {
   }, [jwt, apiUrl, apiFetch]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setFileName(file.name);
+    const fileList = e.target.files;
+    if (fileList && fileList.length > 0) {
+      setSelectedFiles(Array.from(fileList));
     }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file && fileInputRef.current) {
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(file);
-      fileInputRef.current.files = dataTransfer.files;
-      setFileName(file.name);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const arr = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("video/") || f.name.endsWith(".mkv"));
+      if (arr.length > 0) {
+        setSelectedFiles(arr);
+      }
     }
   };
 
@@ -77,8 +76,8 @@ export default function AnalysisPage() {
     }
 
     // Validate input
-    if (!videoUrl && !fileName) {
-      setError("Please provide a video URL or upload a file");
+    if (!videoUrl && selectedFiles.length === 0) {
+      setError("Please provide a video URL or upload one or more files");
       return;
     }
 
@@ -86,8 +85,8 @@ export default function AnalysisPage() {
     setError(null);
 
     try {
-      // If a local file is selected, hand off to the upload-progress page
-      if (!videoUrl && fileInputRef.current?.files?.[0]) {
+      // If local files are selected, hand off to the upload-progress page
+      if (!videoUrl && selectedFiles.length > 0) {
         let srtContent: string | undefined;
         if (transcriptionMethod === "upload" && srtFile) {
           srtContent = await srtFile.text();
@@ -96,7 +95,8 @@ export default function AnalysisPage() {
         }
 
         setPendingUpload({
-          file: fileInputRef.current.files[0],
+          files: selectedFiles,
+          file: selectedFiles[0],
           config: {
             clipsCount,
             promptId,
@@ -109,13 +109,13 @@ export default function AnalysisPage() {
 
       // URL-based flow — create task directly
       const requestBody: Record<string, unknown> = {
-        source: { url: videoUrl || fileName },
+        source: { url: videoUrl || (selectedFiles[0]?.name ?? "") },
         caption_options: {
           pycaps_template: "word-focus",
           transitions_enabled: false,
           transcript_review_enabled: true,
         },
-        transcription_options: { provider: "assemblyai" },
+        transcription_options: { provider: "local" },
         ai_options: {
           provider: "openai",
           clips_count: clipsCount,
@@ -211,13 +211,14 @@ export default function AnalysisPage() {
                   <Upload className="w-8 h-8 text-primary" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-white mb-1">Drag & Drop Local File</h3>
-                  <p className="text-sm text-muted-foreground">MP4, MOV or AVI up to 500MB</p>
+                  <h3 className="text-lg font-semibold text-white mb-1">Drag & Drop Videos</h3>
+                  <p className="text-sm text-muted-foreground">Upload single or multiple MP4, MOV, MKV files for simultaneous clipping</p>
                 </div>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="video/*"
+                  multiple
+                  accept="video/*,video/x-matroska,.mkv"
                   onChange={handleFileChange}
                   className="hidden"
                 />
@@ -229,8 +230,20 @@ export default function AnalysisPage() {
                 >
                   Browse Files
                 </Button>
-                {fileName && (
-                  <p className="text-sm text-primary mt-2">Selected: {fileName}</p>
+                {selectedFiles.length > 0 && (
+                  <div className="space-y-1.5 mt-2 text-left w-full max-w-md">
+                    <p className="text-xs font-semibold text-primary uppercase">
+                      {selectedFiles.length} {selectedFiles.length === 1 ? "video" : "videos"} selected:
+                    </p>
+                    <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
+                      {selectedFiles.map((f, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs text-white bg-slate-900/80 px-3 py-1.5 rounded-lg border border-primary/30">
+                          <span className="truncate max-w-[260px] font-medium">{f.name}</span>
+                          <span className="text-[10px] text-gray-400 font-mono">{(f.size / (1024 * 1024)).toFixed(1)}MB</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

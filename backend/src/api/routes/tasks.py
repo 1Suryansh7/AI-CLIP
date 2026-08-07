@@ -22,6 +22,7 @@ from .utils import (
     _require_admin_access,
     _coerce_bool,
     _resolve_transcription_provider,
+    _default_transcription_provider,
     _coerce_int,
     _resolve_task_timeout_seconds,
     _resolve_transcription_runtime_options,
@@ -185,7 +186,7 @@ async def create_task(request: Request, db: AsyncSession = Depends(get_db)):
         }
     else:
         transcription_provider = _resolve_transcription_provider(
-            transcription_options.get("provider", "assemblyai")
+            transcription_options.get("provider", _default_transcription_provider())
         )
 
     transcription_runtime_options = _resolve_transcription_runtime_options(

@@ -72,6 +72,7 @@ export default function StudioPage() {
     progress: 0, message: "Generating clips…", clipsCompleted: 0, clipsTotal: 0,
   });
   const [videoObjectUrl, setVideoObjectUrl] = useState<string | null>(null);
+  const [videoFetchError, setVideoFetchError] = useState(false);
 
   const [isReopening, setIsReopening] = useState(false);
 
@@ -96,17 +97,38 @@ export default function StudioPage() {
   const fetchClips = useCallback(async () => {
     if (!jwt) return;
     try {
-      const res = await apiFetch(`${apiUrl}/tasks/${taskId}/clips`);
-      if (res.ok) {
-        const data = await res.json();
+      const [clipsRes, taskRes] = await Promise.all([
+        apiFetch(`${apiUrl}/tasks/${taskId}/clips`),
+        apiFetch(`${apiUrl}/tasks/${taskId}`),
+      ]);
+      if (taskRes.ok) {
+        const tData = await taskRes.json();
+        setTask(tData);
+        if (tData.status === "completed" || tData.status === "awaiting_review" || tData.status === "error") {
+          setIsProcessing(false);
+        }
+      }
+      if (clipsRes.ok) {
+        const data = await resJson(clipsRes);
         const fetched: Clip[] = data.clips || [];
         setClips(fetched);
-        setSelectedClip((prev) => prev ?? fetched[0] ?? null);
+        setSelectedClip((prev) => {
+          if (!prev) return fetched[0] || null;
+          const updated = fetched.find((c) => c.id === prev.id);
+          return updated || prev;
+        });
+        if (fetched.length > 0 && fetched.every((c) => !!c.filename)) {
+          setIsProcessing(false);
+        }
       }
     } catch (e) {
       console.error("Failed to fetch clips:", e);
     }
   }, [apiUrl, taskId, jwt, apiFetch]);
+
+  const resJson = async (res: Response) => {
+    try { return await res.json(); } catch { return {}; }
+  };
 
   const connectSSE = useCallback(() => {
     if (!jwt) return;
@@ -150,7 +172,7 @@ export default function StudioPage() {
             if (data.status === "completed") { clearInterval(pollRef.current!); setIsProcessing(false); fetchClips(); }
           }
         } catch {}
-      }, 4000);
+      }, 3000);
     };
 
     eventSourceRef.current = es;
@@ -170,12 +192,16 @@ export default function StudioPage() {
           const taskData = await taskRes.json();
           setTask(taskData);
           if (taskData.status === "processing") { setIsProcessing(true); connectSSERef.current?.(); }
+          else { setIsProcessing(false); }
         }
         if (clipsRes.ok) {
           const clipsData = await clipsRes.json();
           const fetched: Clip[] = clipsData.clips || [];
           setClips(fetched);
           if (fetched.length > 0) setSelectedClip(fetched[0]);
+          if (fetched.length > 0 && fetched.every((c) => !!c.filename)) {
+            setIsProcessing(false);
+          }
         }
       } catch (e) {
         console.error("Failed to fetch task/clips:", e);
@@ -188,12 +214,11 @@ export default function StudioPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId, jwt]);
 
-  // Poll when clips have pending video files or when no clips have loaded yet
+  // Poll when clips have pending video files or while processing
   useEffect(() => {
-    if (isProcessing) return; // SSE already handles this
-    const hasPending = clips.length === 0 || clips.some((c) => !c.filename);
+    const hasPending = clips.length === 0 || clips.some((c) => !c.filename) || isProcessing;
     if (!hasPending) return;
-    const interval = setInterval(fetchClips, 3000);
+    const interval = setInterval(fetchClips, 2500);
     return () => clearInterval(interval);
   }, [clips, isProcessing, fetchClips]);
 
@@ -201,6 +226,7 @@ export default function StudioPage() {
   useEffect(() => {
     if (!selectedClip?.filename) {
       setVideoObjectUrl(null);
+      setVideoFetchError(false);
       return;
     }
 
@@ -209,15 +235,20 @@ export default function StudioPage() {
 
     const fetchVideo = async () => {
       setVideoObjectUrl(null);
+      setVideoFetchError(false);
       try {
         const res = await apiFetch(`${apiUrl}/clips/${selectedClip.filename}`);
-        if (!cancelled && res.ok) {
-          const blob = await res.blob();
-          objectUrl = URL.createObjectURL(blob);
-          setVideoObjectUrl(objectUrl);
+        if (!cancelled) {
+          if (res.ok) {
+            const blob = await res.blob();
+            objectUrl = URL.createObjectURL(blob);
+            setVideoObjectUrl(objectUrl);
+          } else {
+            setVideoFetchError(true);
+          }
         }
       } catch (e) {
-        console.error("Failed to fetch clip video:", e);
+        if (!cancelled) setVideoFetchError(true);
       }
     };
 
@@ -229,6 +260,61 @@ export default function StudioPage() {
       setVideoObjectUrl(null);
     };
   }, [selectedClip?.filename, apiUrl, jwt, apiFetch]);
+
+  const [isGeneratingInStudio, setIsGeneratingInStudio] = useState(false);
+  const [isDownloadingAll, setIsDownloadingAll] = useState(false);
+
+  const handleGenerateClipsFromStudio = async () => {
+    if (!jwt) return;
+    setIsGeneratingInStudio(true);
+    setIsProcessing(true);
+    try {
+      const response = await apiFetch(`${apiUrl}/tasks/${taskId}/generate-clips`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pycaps_template: "word-focus",
+          aspect_ratio: "9:16",
+        }),
+      });
+      if (response.ok) {
+        connectSSERef.current?.();
+      }
+    } catch (error) {
+      console.error("Failed to generate clips from studio:", error);
+      setIsGeneratingInStudio(false);
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDownloadAll = async () => {
+    if (!jwt || clips.length === 0) return;
+    setIsDownloadingAll(true);
+    try {
+      for (const clip of clips) {
+        if (!clip.filename) continue;
+        try {
+          const res = await apiFetch(`${apiUrl}/clips/${clip.filename}`);
+          if (res.ok) {
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = clip.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            await new Promise((r) => setTimeout(r, 600));
+          }
+        } catch (e) {
+          console.error(`Failed to download clip ${clip.filename}:`, e);
+        }
+      }
+    } finally {
+      setIsDownloadingAll(false);
+    }
+  };
 
   const handleDeleteClip = async (clipId: string) => {
     if (!jwt) return;
@@ -421,15 +507,35 @@ export default function StudioPage() {
                                   aspectRatio={ar}
                                 />
                               ) : (
-                                <div className="flex flex-col items-center justify-center gap-3 py-16">
-                                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                                  <p className="text-gray-400 text-sm">Loading video…</p>
+                                <div className="flex flex-col items-center justify-center gap-3 py-10 px-4 text-center bg-slate-900/80 rounded-xl border border-primary/40">
+                                  <Sparkles className="w-8 h-8 text-primary animate-pulse" />
+                                  <h4 className="text-white font-bold text-sm">Clip Video Ready to Render</h4>
+                                  <p className="text-xs text-gray-400 max-w-sm">
+                                    Subtitles and viral timestamps are locked. Render your 1080p 60fps clip video instantly below:
+                                  </p>
+                                  <div className="flex items-center gap-2 flex-wrap justify-center mt-1">
+                                    <button
+                                      onClick={handleGenerateClipsFromStudio}
+                                      disabled={isGeneratingInStudio}
+                                      className="px-4 py-2 rounded-xl bg-gradient-purple hover:opacity-90 disabled:opacity-50 text-white font-bold text-xs glow-purple flex items-center gap-2"
+                                    >
+                                      {isGeneratingInStudio ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                      Render Video Clip (Fast 1080p 60fps)
+                                    </button>
+                                    <button
+                                      onClick={() => router.push(`/review/${taskId}`)}
+                                      className="px-4 py-2 rounded-xl bg-muted hover:bg-muted/80 text-gray-300 font-semibold text-xs flex items-center gap-1.5"
+                                    >
+                                      <Edit className="w-3.5 h-3.5" />
+                                      Edit Subtitles
+                                    </button>
+                                  </div>
                                 </div>
                               )}
                               {isProcessing && (
                                 <div className="absolute inset-0 z-20 rounded-lg bg-black/60 flex flex-col items-center justify-center gap-2 cursor-not-allowed">
                                   <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                                  <p className="text-xs text-white/70">Generating clips…</p>
+                                  <p className="text-xs text-white/70">Generating 1080p 60fps clips…</p>
                                 </div>
                               )}
                             </div>
@@ -437,23 +543,22 @@ export default function StudioPage() {
 
                           {/* Action Buttons — directly below video, inside same section */}
                           <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-border">
-                            {videoObjectUrl && (
-                              <a
-                                href={videoObjectUrl}
-                                download={selectedClip.filename}
-                                className="flex-1 min-w-[100px] h-10 rounded-lg bg-gradient-purple hover:opacity-90 text-white font-semibold transition-all flex items-center justify-center gap-2 text-sm"
-                              >
-                                <Download className="w-4 h-4" />
-                                Download
-                              </a>
-                            )}
-                            <button className="h-10 px-4 rounded-lg bg-muted hover:bg-muted/80 text-white font-medium transition-all flex items-center gap-2 text-sm">
-                              <Share2 className="w-4 h-4" />
-                              Share
-                            </button>
-                            <button className="h-10 px-4 rounded-lg bg-muted hover:bg-muted/80 text-white font-medium transition-all flex items-center gap-2 text-sm">
+                            <a
+                              href={videoObjectUrl || `${apiUrl}/clips/${selectedClip.filename}`}
+                              download={selectedClip.filename}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 min-w-[120px] h-10 rounded-lg bg-gradient-purple hover:opacity-90 text-white font-semibold transition-all flex items-center justify-center gap-2 text-sm glow-purple cursor-pointer"
+                            >
+                              <Download className="w-4 h-4" />
+                              Download Clip
+                            </a>
+                            <button
+                              onClick={() => router.push(`/review/${taskId}`)}
+                              className="h-10 px-4 rounded-lg bg-muted hover:bg-muted/80 text-white font-medium transition-all flex items-center gap-2 text-sm"
+                            >
                               <Edit className="w-4 h-4" />
-                              Edit
+                              Edit Captions
                             </button>
                             <button
                               onClick={() => handleDeleteClip(selectedClip.id)}
@@ -466,7 +571,7 @@ export default function StudioPage() {
                       ) : (
                         <div className="flex flex-col items-center justify-center gap-3 py-16">
                           <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                          <p className="text-gray-400 text-sm">Clip {selectedIndex + 1} is still being generated…</p>
+                          <p className="text-gray-400 text-sm">Clip {selectedIndex + 1} is being prepared…</p>
                         </div>
                       )}
                     </div>
@@ -584,11 +689,22 @@ export default function StudioPage() {
                 <div className="glass rounded-xl border border-border p-4">
                   <h4 className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">Bulk Actions</h4>
                   <div className="space-y-2">
-                    <button className="w-full h-9 rounded-lg bg-muted hover:bg-muted/80 text-white text-sm font-medium transition-all">
-                      Download All
-                    </button>
-                    <button className="w-full h-9 rounded-lg bg-muted hover:bg-muted/80 text-white text-sm font-medium transition-all">
-                      Share All
+                    <button
+                      onClick={handleDownloadAll}
+                      disabled={isDownloadingAll || clips.length === 0}
+                      className="w-full h-10 rounded-lg bg-gradient-purple hover:opacity-90 disabled:opacity-50 text-white text-sm font-bold transition-all flex items-center justify-center gap-2 glow-purple"
+                    >
+                      {isDownloadingAll ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Downloading All Clips…
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-4 h-4" />
+                          Download All ({clips.length} Clips)
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>

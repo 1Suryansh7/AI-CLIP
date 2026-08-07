@@ -13,7 +13,7 @@ interface ProcessingStep {
 
 interface TaskStatus {
   task_id: string;
-  status: "pending" | "processing" | "completed" | "failed";
+  status: "pending" | "processing" | "completed" | "failed" | "awaiting_review" | "transcribed";
   progress: number;
   current_step: string;
   message: string;
